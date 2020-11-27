@@ -1,7 +1,7 @@
 import socket, time, os, select
 from io import BytesIO
 
-IP = "192.168.43.93"
+IP = "127.0.0.2"
 PORT_A = 7007
 PORT_B = 6006
 
@@ -12,6 +12,26 @@ buffer_fichier = bytearray()
 buffer_ack = bytearray()
 nb_segment = 0
 timeout = 0.2
+
+#creer le numero du segment sur 6 octets
+
+def init_segment(n):
+    nb = str(n)
+    c = []
+    for i in range(len(nb)):
+        c.append(n % 10)
+        n = n / 10
+        n= int(n)
+        i= i+1
+    c.reverse()
+    d=[]
+    l= 6 - len(c)
+    for i in range(l):
+        d.append(0)
+        i=i+1
+    e= d + c
+    print(e)
+    return e
 
 #socket creation
 try:
@@ -48,7 +68,7 @@ data=data.decode("Utf8")
 print("Client: %s" % data)
 
 socket_connect.sendto(SYN_ACK.encode("ascii"), addr)
-print("ME: ", SYN_ACK)
+print("Me: " + SYN_ACK)
 
 data, addr = socket_connect.recvfrom(1024)
 data=data.decode("Utf8")
@@ -56,7 +76,6 @@ print("Client: %s" % data)
 
 data, addr = socket_transfer.recvfrom(1024)
 data=data.decode("ascii")
-print(data)
 
 #if(data == "image") :
 print("Client request: %s" % data)
@@ -70,8 +89,9 @@ size = len(buffer_fichier)
 
     #file sending
 for i in range(0,size,MAXLINE):
-    buffer_segment = bytearray()
-    buffer_segment.append(nb_segment)
+    debut_segment = init_segment(nb_segment)
+    buffer_segment = bytearray(debut_segment)
+
     for j in range(i, i + MAXLINE):
         if j < size:
             buffer_segment.append(buffer_fichier[j])
@@ -88,8 +108,5 @@ for i in range(0,size,MAXLINE):
     #buffer_ack.append(data)
 
 socket_transfer.sendto(END.encode("Utf8"), (IP, PORT_B))
-print("File of %d bytes received" %  os.path.getsize("image.jpg"))
+print("File of %d bytes send" %  os.path.getsize("image.jpg"))
 print("nb of ack received %d" % len(buffer_ack))
-
-#else :
-print("No file requested")
