@@ -1,6 +1,6 @@
 import socket, time, os, select
 
-IP = "127.0.0.1"
+IP = "192.168.43.93"
 PORT_A = 7007
 PORT_B = 6006
 
@@ -42,7 +42,7 @@ data, addr = socket_connect.recvfrom(1024)
 data=data.decode("Utf8")
 print("Client: %s" % data)
 
-socket_connect.sendto(SYN_ACK.encode("Utf8"), addr)
+socket_connect.sendto(SYN_ACK.encode("Utf8"), addr.encode("Utf8"))
 print("ME: SYN_ACK")
 
 data, addr = socket_connect.recvfrom(1024)
