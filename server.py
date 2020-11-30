@@ -8,30 +8,20 @@ PORT_B = 6006
 SYN_ACK = "SYN-ACK6006"
 END = "FIN"
 MAXLINE = 1024
-buffer_fichier = bytearray()
+buffer_fichier = []
+buffer_segment=[]
 buffer_ack = bytearray()
 nb_segment = 0
-timeout = 0.2
+timeout = 0.5
+seg_manquant=""
+
 
 #creer le numero du segment sur 6 octets
 
 def init_segment(n):
-    nb = str(n)
-    c = []
-    for i in range(len(nb)):
-        c.append(n % 10)
-        n = n / 10
-        n= int(n)
-        i= i+1
-    c.reverse()
-    d=[]
-    l= 6 - len(c)
-    for i in range(l):
-        d.append(0)
-        i=i+1
-    e= d + c
-    print(e)
-    return e
+    u= str(n)
+    v= u.zfill(6)
+    return v
 
 #socket creation
 try:
@@ -66,6 +56,7 @@ print("Server waiting for a client")
 data, addr = socket_connect.recvfrom(1024)
 data=data.decode("Utf8")
 print("Client: %s" % data)
+print(addr)
 
 socket_connect.sendto(SYN_ACK.encode("ascii"), addr)
 print("Me: " + SYN_ACK)
@@ -81,30 +72,32 @@ data=data.decode("ascii")
 print("Client request: %s" % data)
     #open file and put it in a buffer
 my_file = open("image.jpg", "rb")
-bytes = my_file.read()
+size = 0
+while size < os.path.getsize("image.jpg"):
+    bytes = my_file.read(1024)
+    buffer_fichier.append(bytes)
+    size = len(buffer_fichier)*1024
 my_file.close()
-for elem in bytes:
-    buffer_fichier.append(elem)
-size = len(buffer_fichier)
+print("la taille de buffer fichier est %d", size)
 
-    #file sending
-for i in range(0,size,MAXLINE):
-    debut_segment = init_segment(nb_segment)
-    buffer_segment = bytearray(debut_segment)
+#file sending
+for i in range(int(size/1024)):
+    buffer_segment = init_segment(nb_segment).encode("Utf8")
 
-    for j in range(i, i + MAXLINE):
-        if j < size:
-            buffer_segment.append(buffer_fichier[j])
-        else:
-            break
-    socket_transfer.sendto(buffer_segment, (IP, PORT_B))
+    socket_transfer.sendto((buffer_segment+buffer_fichier[i]), (addr))
     nb_segment += 1
     ready = select.select([socket_transfer], [], [], timeout)
     if ready[0]:
-        data, addr = socket_transfer.recvfrom(1)
-        data.decode("Utf8")
+        print("ready")
+        data, addr = socket_transfer.recvfrom(1024)
+        data=data.decode("Utf8")
+        lol = int(float(data[-3:]))
+        print(lol)
+
     else:
         print("pas de ack recu, probleme")
+        #buffer_segment = init_segment(seg_manquant).encode("Utf8")
+        #socket_transfer.sendto((buffer_segment+buffer_fichier[seg_manquant]), (addr))
     #buffer_ack.append(data)
 
 socket_transfer.sendto(END.encode("Utf8"), (IP, PORT_B))
