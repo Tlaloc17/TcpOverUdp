@@ -11,14 +11,12 @@ END = "FIN"
 MAXLINE = 1024
 buffer_fichier = []
 buffer_segment=[]
-
+file= "image.jpg"
 
 nb_segment = 1
-timeout = 0.0000001
-seg_manquant=""
+timeout = 0.00001
 j=1
 i=0
-bool =False
 
 #creer le numero du segment sur 6 octets
 
@@ -62,74 +60,68 @@ data=data.decode("Utf8")
 print("Client: %s" % data)
 print(addr)
 
-socket_connect.sendto(SYN_ACK.encode("ascii"), addr)
+socket_connect.sendto(SYN_ACK.encode("Utf8"), addr)
 print("Me: " + SYN_ACK)
 
 data, addr = socket_connect.recvfrom(1024)
 data=data.decode("Utf8")
 print("Client: %s" % data)
 
+
 data, addr = socket_transfer.recvfrom(1024)
 data=data.decode("ascii")
-
-#if(data == "image") :
-print("Client request: %s" % data)
-    #open file and put it in a buffer
-my_file = open("image.jpg", "rb")
-size = 0
-while size < os.path.getsize("image.jpg"):
-    bytes = my_file.read(1024)
-    buffer_fichier.append(bytes)
-    size = len(buffer_fichier)*1024
-
-my_file.close()
-print("la taille de buffer fichier est %d", size)
-last_ack=0
-
-#file sending
-
-while last_ack != int(size/1024):
-
-    if  nb_segment<int(size/1024)+1:
-        buffer_segment = init_segment(nb_segment).encode("Utf8")
-        socket_transfer.sendto((buffer_segment+buffer_fichier[nb_segment-1]), (addr))
-        print("Sent segment:", nb_segment)
-        nb_segment += 1
-
-    ready = select.select([socket_transfer], [], [], 0)
-    if ready[0]:
-        #print("ready")
-        data, addr = socket_transfer.recvfrom(1024)
-        data=data.decode("Utf8")
-        seg_ack = data[-3:].replace('\x00','')
-        seg_ack=int(seg_ack)
-        last_ack=seg_ack
-        print(seg_ack ,":" , last_ack)
-
-    if j==5 :
-        if last_ack != nb_segment :
-            nb_segment=last_ack+1
-            print("nb_segment=",nb_segment)
-        j=0
-
-    j+=1
-"""
-    for i in range(int(size/1024)-1):
-        if buffer_ack[i]!=1 :
-            bool = False
-            break
-        bool = True#
-"""
-
-""""
-    else:
-        print("pas de ack recu, probleme")
-        buffer_segment = init_segment(int(seg_manquant+1)).encode("Utf8")
-        socket_transfer.sendto((buffer_segment+buffer_fichier[seg_manquant+1]), (addr))
-"""
+data=data[:-1]
 
 
-socket_transfer.sendto(END.encode("Utf8"), addr)
-print("File of %d bytes send" %  os.path.getsize("image.jpg"))
-print(size)
-print("nb of ack received :" , last_ack)
+print("taille data :", len(data), "taille file name:", len(file))
+if(data==file) :
+
+    print("Client request: %s" % data)
+    temps_avant= time.time()
+    my_file = open("image.jpg", "rb")
+    size = 0
+
+    while size < os.path.getsize("image.jpg"):
+        bytes = my_file.read(1024)
+        buffer_fichier.append(bytes)
+        size = len(buffer_fichier)*1024
+
+    my_file.close()
+    print("la taille de buffer fichier est %d", size)
+    last_ack=0
+
+    #file sending
+
+    while last_ack != int(size/1024):
+
+        if  nb_segment<int(size/1024)+1:
+            buffer_segment = init_segment(nb_segment).encode("Utf8")
+            socket_transfer.sendto((buffer_segment+buffer_fichier[nb_segment-1]), (addr))
+            print("Sent segment:", nb_segment)
+            nb_segment += 1
+
+        ready = select.select([socket_transfer], [], [], 0)
+        if ready[0]:
+            #print("ready")
+            data, addr = socket_transfer.recvfrom(1024)
+            data=data.decode("Utf8")
+            seg_ack = data[-3:].replace('\x00','')
+            seg_ack=int(seg_ack)
+            last_ack=seg_ack
+            print(seg_ack ,":" , last_ack)
+
+        if j==5 :
+            if last_ack != nb_segment :
+                nb_segment=last_ack+1
+                print("nb_segment=",nb_segment)
+            j=0
+
+        j=j+1
+    print(int(size/1024))
+    socket_transfer.sendto(END.encode("Utf8"), addr)
+    temps_apres=time.time()
+    debit = (size/ (temps_apres-temps_avant))/1000
+    print("Débit : ", debit , "ko/s")
+    print("File of %d bytes send" %  os.path.getsize("image.jpg"))
+    print(size)
+    print("nb of ack received :" , last_ack)
