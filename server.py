@@ -11,7 +11,7 @@ MAXLINE = 1024
 buffer_fichier = []
 buffer_segment=[]
 buffer_ack = bytearray()
-nb_segment = 0
+nb_segment = 1
 timeout = 0.5
 seg_manquant=""
 
@@ -73,6 +73,7 @@ print("Client request: %s" % data)
     #open file and put it in a buffer
 my_file = open("image.jpg", "rb")
 size = 0
+
 while size < os.path.getsize("image.jpg"):
     bytes = my_file.read(1024)
     buffer_fichier.append(bytes)
@@ -82,24 +83,25 @@ print("la taille de buffer fichier est %d", size)
 
 #file sending
 for i in range(int(size/1024)):
-    buffer_segment = init_segment(nb_segment).encode("Utf8")
 
-    socket_transfer.sendto((buffer_segment+buffer_fichier[i]), (addr))
+    buffer_segment = init_segment(nb_segment).encode("Utf8")
     nb_segment += 1
+    socket_transfer.sendto((buffer_segment+buffer_fichier[i]), (addr))
+
     ready = select.select([socket_transfer], [], [], timeout)
     if ready[0]:
         print("ready")
         data, addr = socket_transfer.recvfrom(1024)
         data=data.decode("Utf8")
-        lol = int(float(data[-3:]))
-        print(lol)
+        seg_manquant = data[-3:].replace("\x00","")
+        seg_manquant= int(seg_manquant)
 
     else:
         print("pas de ack recu, probleme")
-        #buffer_segment = init_segment(seg_manquant).encode("Utf8")
-        #socket_transfer.sendto((buffer_segment+buffer_fichier[seg_manquant]), (addr))
+        buffer_segment = init_segment(int(seg_manquant+1)).encode("Utf8")
+        socket_transfer.sendto((buffer_segment+buffer_fichier[seg_manquant+1]), (addr))
     #buffer_ack.append(data)
 
-socket_transfer.sendto(END.encode("Utf8"), (IP, PORT_B))
+socket_transfer.sendto(END.encode("Utf8"), (addr))
 print("File of %d bytes send" %  os.path.getsize("image.jpg"))
 print("nb of ack received %d" % len(buffer_ack))
