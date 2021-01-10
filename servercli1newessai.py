@@ -11,14 +11,7 @@ PORT_A = 7007
 PORT_B = 6006
 END = "FIN"
 MAXLINE = 1024
-"""
-global swnd
-global perc_timeout
-global difference
-"""
-swnd = int(sys.argv[1])
-perc_timeout = float(sys.argv[2])
-difference = int(sys.argv[3])
+
 
 
 # logging configuration
@@ -30,14 +23,6 @@ class RTT:
     def __init__ (self,time):
         self.time=time
 rtt_begin=RTT(0)
-
-def slow_start_imp(swnd,sstresh):
-    if swnd<sstresh :
-        return True
-    else :
-        return False
-
-#def congestion_avoidance()
 
 
 
@@ -51,6 +36,7 @@ def init_segment(n):
     u= str(n)
     v= u.zfill(6)
     return v
+
 
 
 def send_packet(nb_segment, socket_transfer, buffer_fichier, addr):
@@ -133,6 +119,10 @@ def worker(port_b):
     nb_segment = 0
     j=1
     last_ack=0
+    swnd = 40
+    perc_timeout = 1
+    difference = 110
+
 
 
     logger.debug("Hello from worker on %d " % port_b)
@@ -170,29 +160,27 @@ def worker(port_b):
     size = 0
 
     while size < os.path.getsize(file):
-        bytes = my_file.read(1024)
+        bytes = my_file.read(1494)
         buffer_fichier.append(bytes)
-        size = len(buffer_fichier)*1024
+        size = len(buffer_fichier)*1494
 
     my_file.close()
     logger.debug("la taille de buffer fichier est %d", size)
     last_ack=0
-    seg_tot=int(size/1024)
-    print(seg_tot)
+    seg_tot=len(buffer_fichier)
 
-    # file sending
-    # fenetre 2 et srtt
 
-    rtt_count = 0
+
+
+
     timeout = (rtt_begin.time)*perc_timeout
-    buff_time=[]
-    buff_time.append(timeout)
-    packet_has_been_sent = False
-    no_response_count=0
-    buff_nb_segment=[]
-    #swnd=45
+
+
+
+
+
     i=0
-    sstresh=0
+    no_response_count=0
     msg_receive=0
     socket_transfer.setblocking(False)
     while last_ack != seg_tot:
@@ -215,11 +203,13 @@ def worker(port_b):
 
                 i+=1
 
-            packet_has_been_sent = True
+
             i=0
             while i<swnd:
+                #attente des ACK. On attend autant d'ack qu'on en a envoyé
                 ready = select.select([socket_transfer], [], [], timeout)
                 if ready[0]:
+                    no_response_count=0
                     msg_receive, addr = socket_transfer.recvfrom(1024)
                     msg_receive=msg_receive.decode("Utf8")
                     logger.debug(f"msg_receive begin = {msg_receive}")
@@ -227,21 +217,31 @@ def worker(port_b):
                     logger.debug(f"msg_receive mid = {msg_receive}")
                     msg_receive =int(msg_receive[:-1])
                     logger.debug(f"msg_receive = {msg_receive}")
-                    #fast_retransmit
+
+                    #Mise à jour du dernier ACK
                     if last_ack < msg_receive:
                         last_ack=msg_receive
                         f_ret_counter=0
+                    #Si le dernier ack == le numéro du dernier segment envoyé, on break
                     if last_ack==nb_segment:
-
-                        continue
+                        break
                     if last_ack==msg_receive:
+                        #fast_retransmit
                         f_ret_counter+=1
-                        if f_ret_counter==3 and last_ack+1<seg_tot:
-                            #nb_segment=last_ack+1
+                        if f_ret_counter==3 and last_ack+1<=seg_tot:
                             logger.debug(f"fast retransmit {last_ack+1}")
                             send_packet(last_ack+1, socket_transfer, buffer_fichier, addr)
                             f_ret_counter=0
-                            continue
+
+                #si on ne reçoit rien avant le timeout
+                else :
+                    no_response_count+=1
+                    #RTO=2*RTT
+                    if no_response_count==2 and last_ack+1<=seg_tot:
+
+                        send_packet(last_ack+1, socket_transfer, buffer_fichier, addr)
+                        no_response_count=0
+
 
 
 
@@ -252,64 +252,18 @@ def worker(port_b):
 
 
 
-        # (2) On attend un ACK du dernier paquet envoyé
-        #ready = select.select([socket_transfer], [], [], timeout)
 
-        # On reçoit un message
-        #if ready[0]:
-            # Dans tous les cas on récupère le numéro d'ACK
+            # (2.3) Problème: on reçoit un ack inférieur au num de la séquence, ça veut dire qu'il manque un paquet au client
 
-
-
-
-            # Dans tous les cas on calcule le RTT
-
-                #  (2.1) Tout se déroule comme prévu: on reçoit l'ACK du dernier paquet envoyé
-            if last_ack == nb_segment :
-                #timeout=0.3*timeout+0.7*((rtt_recv_time-rtt_send_time)/(swnd))
-                #print("tiemout=",timeout)
-
-                f_ret_counter = 0
-                logger.info("Cas 2.1)  tout se déroule comme prévu")
-                """
-                if slow_start_imp(swnd, sstresh):
-                    swnd+=1
-                """
-                continue
-
-
-        #Problème : Dernier ack reçu différent du numéro de segment envoyé
-
-
-
-
-
-
-            #  (2.2) Problème: on reçoit un ACK supérieur au num de la séquence, donc on met à jour notre nb_segment
-
-
-
-
-            elif last_ack < nb_segment:
-                logger.info(f"Cas 2.3)  last_ack = {last_ack}       <     nb_segment = {nb_segment}")
-                # on incrémente le compteur de fast_retransmit
-                if  nb_segment-last_ack>=difference:
-                    logger.debug(f"Reset à la différence {last_ack+1}")
-                    nb_segment=last_ack+1
-                    continue
-                f_ret_counter +=1
-                if f_ret_counter==3 and last_ack+1<=seg_tot:
-                    #nb_segment=last_ack+1
-                    logger.debug(f"fast retransmit {last_ack+1}")
-                    send_packet(last_ack+1, socket_transfer, buffer_fichier, addr)
-                    f_ret_counter=0
-                    continue
-
-            elif nb_segment-last_ack>=difference:
+            logger.info(f"Cas 2.3)  last_ack = {last_ack}       <     nb_segment = {nb_segment}")
+            if  nb_segment-last_ack>=difference:
+                logger.debug(f"Reset à la différence {last_ack+1}")
                 nb_segment=last_ack+1
                 continue
 
-            # (2.3) Problème: on reçoit un ack inférieur au num de la séquence, ça veut dire qu'il manque un paquet au client
+
+
+
 
 
 
@@ -324,6 +278,7 @@ def worker(port_b):
     temps_apres=time.time()
     debit = (size/ (temps_apres-temps_avant))/1000
     print(debit)
+
 
 
 
